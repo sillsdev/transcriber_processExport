@@ -12,6 +12,6 @@
   "dependencies": {
     "adm-zip": "^0.4.14",
     "aws-sdk": "^2.1273.0",
-    "moment": "^2.24.0"
+    "moment": "^2.29.4"
   }
 }
