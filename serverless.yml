@@ -1,11 +1,13 @@
-service: sil-transcriber-processnewfile
+service: apm-processexport
 
 provider:
   name: aws
-  runtime: nodejs16.x
+  runtime: nodejs18.x
   region: us-east-1
   stage: dev #cli build params will override this!!
-  stackName: TranscriberTrigger${self:custom.myStage}
+  stackName: APMExportTrigger${self:custom.myStage}
+
+frameworkVersion: ^3.25.1
 
 custom:
   myStage: ${opt:stage, self:provider.stage} #use the --stage CLI option if it exists, or use provider.stage
@@ -30,20 +32,21 @@ package:
     - 'node_modules/token-types/**' 
   
 functions:
-  sil-transcriber-processnewfile:
+  apm-processexport:
     handler: src/index.handler # required, handler set in AWS Lambda
-    name: sil-transcriber-processnewfile-${self:custom.myStage} # optional, Deployed Lambda name
-    description: Process new audio or export file upload # optional, Description to publish to AWS
+    name: apm-processexport-${self:custom.myStage} # optional, Deployed Lambda name
+    description: Process SQS export message to add media to audio or export file # optional, Description to publish to AWS
     #events:
     # - s3: 
     #      bucket: ${file(./serverless.env.yml):${self:custom.myStage}.SIL_TR_USERFILES_BUCKET
     #      event: s3:ObjectCreated:*
     #      existing: true
     runtime: nodejs16.x # optional overwrite, default is provider runtime
-    memorySize: 1024 # optional, in MB, default is 1024
-    timeout: 360 # optional, in seconds, default is 6
-    environment:
-      SIL_TR_HOST: ${file(./serverless.env.yml):${self:custom.myStage}.SIL_TR_HOST}
-      SIL_TR_URLPATH: ${file(./serverless.env.yml):${self:custom.myStage}.SIL_TR_URLPATH}
+    memorySize: ${file(./serverless.env.yml):${self:custom.myStage}.MEMORY} # optional, in MB, default is 1024
+    timeout:  ${file(./serverless.env.yml):${self:custom.myStage}.TIMEOUT} # optional, in seconds, default is 6
     role: ${file(./serverless.env.yml):${self:custom.myStage}.SIL_TR_LAMBDA_ROLE}
+    environment:
+      SIL_TR_USERFILES_BUCKET: ${file(./serverless.env.yml):${self:custom.myStage}.SIL_TR_USERFILES_BUCKET} 
+      TIMEOUT: ${file(./serverless.env.yml):${self:custom.myStage}.TIMEOUT}
+      SIL_TR_EXPORT_QUEUE: ${file(./serverless.env.yml):${self:custom.myStage}.SIL_TR_EXPORT_QUEUE} 
     
