@@ -1,3 +1,3 @@
-# transcriber_s3_trigger
-deploy:serverless deploy --verbose -s qa
+# transcriber_sqs_trigger
+deploy:serverless deploy --verbose -s dev
 
