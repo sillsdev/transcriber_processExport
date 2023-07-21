@@ -1,6 +1,5 @@
 const AWS = require('aws-sdk');
 
-const timeout = process.env.TIMEOUT;
 const queue = process.env.SIL_TR_EXPORT_QUEUE;
 const bucket = process.env.SIL_TR_USERFILES_BUCKET;
 
@@ -70,11 +69,12 @@ exports.handler = async function(event, context) {
     return data.Location;
   }
 
-  async function exportProjectMedia(info) {
+  async function exportProjectMedia(info, context) {
     const AdmZip = require("adm-zip");
     let start = info.Start;
-    const secondsOfWork = timeout-30;
-    const dtBail = Date.now() + secondsOfWork*1000;
+    //give myself 6 minutes to write the file 
+    console.log('remaining time', context.getRemainingTimeInMillis(),context.getRemainingTimeInMillis() - 400000);
+    const dtBail = Date.now() + (context.getRemainingTimeInMillis() - 400000);
     let bailNow = false;
     const inputKey = info.Folder + '/' + info.PTFFile; 
 
@@ -97,7 +97,7 @@ exports.handler = async function(event, context) {
       if (Array.isArray(media.data)) {
         for (let ix = start; !bailNow && ix < media.data.length; ix++) {
           var element = media.data[ix];
-          console.log(ix.toString(), " of ", media.data.length.toString(), element.attributes["s3file"]);
+          //console.log(ix.toString(), " of ", media.data.length.toString(), element.attributes["s3file"]);
           if (element.attributes["audio-url"]) {
             try {
               var buf = await FileToBuffer(element.attributes["s3file"]);
@@ -113,21 +113,27 @@ exports.handler = async function(event, context) {
           }
           start += 1;
           bailNow = Date.now() > dtBail;
-          if (start % 20 === 0 || bailNow) {
-            await putFile(statusFile, start.toString() + " media");
+          if (start % 50 === 0 || bailNow) {
+            await putFile(statusFile, start.toString() + " media " + (bailNow ? "writing" : ""));
             if (bailNow)
             {
-            var buf = zip.toBuffer();
-            await putFile(inputKey, buf);
+              var buf = zip.toBuffer();
+              await putFile(inputKey, buf);
             }
           }
         }
         if (!bailNow) {
-          console.log("done", start);
+          console.log("done", context.getRemainingTimeInMillis());
+          await putFile(statusFile, media.data.length.toString()  + " media writing");
+          var x = Date.now();
           if (deletemf) zip.deleteFile(mediafiles);
-          await putFile(inputKey, zip.toBuffer());
+          var buf = zip.toBuffer();
+          console.log("zip toBuffer",Date.now()- x);          
+          await putFile(inputKey, buf);
+          console.log("write to s3",Date.now()- x);          
           await putFile(statusFile, "-1");
           start = -1;
+          console.log("exit", Date.now()- x);
         }
       }
     }
@@ -160,38 +166,22 @@ exports.handler = async function(event, context) {
 
   try {
     const { body ,attributes} =  event.Records[0];
-      var info = JSON.parse(body)
-      var start = await exportProjectMedia(info);
-      if (start > 0)
-      {
-        //send a message to start again
-        var params = {
-          MessageBody:JSON.stringify({...info, Start:start}),
-          MessageDeduplicationId: attributes.MessageGroupId + "_" + start.toString(),
-          MessageGroupId:attributes.MessageGroupId,
-          QueueUrl: queue
-        };
-        console.log(params);
-        const result = await sendMsgWrap(params);
-      }
-      /*
-        var deleteParams = {
-          QueueUrl: queue,
-          ReceiptHandle: msg.receiptHandle
-        };
-        console.log('deleteParams', deleteParams);
-        sqs.deleteMessage(deleteParams, function(err, data) {
-          if (err) {
-            console.log("Delete Error", err);
-          } else {
-            console.log("Message Deleted", data);
-          }
-        });
-        */
-      }
-      catch (err) {
-          console.log(err.toString());
-      }
-
-  
+    var info = JSON.parse(body)
+    var start = await exportProjectMedia(info, context);
+    if (start > 0)
+    {
+      //send a message to start again
+      var params = {
+        MessageBody:JSON.stringify({...info, Start:start}),
+        MessageDeduplicationId: attributes.MessageGroupId + "_" + start.toString(),
+        MessageGroupId:attributes.MessageGroupId,
+        QueueUrl: queue
+      };
+      console.log(params);
+      const result = await sendMsgWrap(params);
+    }
+  }
+  catch (err) {
+      console.log(err.toString());
+  } 
 }
