@@ -62,17 +62,15 @@ exports.handler = async function(event, context) {
       Body: body,
       ContentType: "application/" +  filekey.substring(filekey.lastIndexOf(".")+1),
     };
-    console.log(params);
     var mu = s3.upload(params);
     var data = await mu.promise();
-    console.log("file saved ", data.Location);
     return data.Location;
   }
 
   async function exportProjectMedia(info, context) {
     const AdmZip = require("adm-zip");
     let start = info.Start;
-    //give myself 6 minutes to write the file 
+    //give myself 6ish minutes to write the file 
     console.log('remaining time', context.getRemainingTimeInMillis(),context.getRemainingTimeInMillis() - 400000);
     const dtBail = Date.now() + (context.getRemainingTimeInMillis() - 400000);
     let bailNow = false;
@@ -101,7 +99,8 @@ exports.handler = async function(event, context) {
           if (element.attributes["audio-url"]) {
             try {
               var buf = await FileToBuffer(element.attributes["s3file"]);
-              zip.addFile(element.attributes["audio-url"], buf);
+              if (buf !== null)
+                zip.addFile(element.attributes["audio-url"], buf);
             } catch (e) {
               console.log(
                 "error adding file",

@@ -47,6 +47,5 @@ functions:
     role: ${file(./serverless.env.yml):${self:custom.myStage}.SIL_TR_LAMBDA_ROLE}
     environment:
       SIL_TR_USERFILES_BUCKET: ${file(./serverless.env.yml):${self:custom.myStage}.SIL_TR_USERFILES_BUCKET} 
-      TIMEOUT: ${file(./serverless.env.yml):${self:custom.myStage}.TIMEOUT}
       SIL_TR_EXPORT_QUEUE: ${file(./serverless.env.yml):${self:custom.myStage}.SIL_TR_EXPORT_QUEUE} 
     
