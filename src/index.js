@@ -1,32 +1,28 @@
-const AWS = require('aws-sdk');
+import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
+import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { Readable } from "stream";
+import AdmZip from "adm-zip";
 
 const queue = process.env.SIL_TR_EXPORT_QUEUE;
 const bucket = process.env.SIL_TR_USERFILES_BUCKET;
+const sqsClient = new SQSClient();
+const s3Client = new S3Client();
 
-exports.handler = async function(event, context) {
+export const handler = async function(event, context) {
   console.log('Here we are', event,event.Records.length);
-  var sqs = new AWS.SQS();   
-  
+ 
   async function getFileStream(filekey) {
-    const aws = require("aws-sdk");
-    const s3 = new aws.S3(); // Pass in opts to S3 if necessary
-    var params = {
-      Bucket: bucket,
-      Key: filekey,
+    const params = {
+    Bucket: bucket,
+    Key: filekey,
     };
-    const stream = s3
-      .getObject(params)
-      .createReadStream()
-      .on("error", (err) => {
-        console.log("stream error", err.message);
-        return null;
-      })
-      .on("finish", () => {
-        //console.log('stream finish');
-      })
-      .on("close", () => {
-        //console.log("stream close");
-      });
+    const command = new GetObjectCommand(params);
+    const response = await s3Client.send(command);
+    const stream = response.Body; // as Readable;
+    stream.on("error", (err) => {
+      console.log("stream error", err.message);
+      return null;
+    });
     return stream;
   }
   async function FileToBuffer(filekey) {
@@ -53,8 +49,6 @@ exports.handler = async function(event, context) {
   }
 
   async function putFile(filekey, body) {
-    const aws = require("aws-sdk");
-    const s3 = new aws.S3(); 
     console.log('putFile', filekey);
     var params = {
       Bucket: bucket,
@@ -62,13 +56,12 @@ exports.handler = async function(event, context) {
       Body: body,
       ContentType: "application/" +  filekey.substring(filekey.lastIndexOf(".")+1),
     };
-    var mu = s3.upload(params);
-    var data = await mu.promise();
+    const command = new PutObjectCommand(params);
+    const data = await s3Client.send(command);
     return data.Location;
   }
 
   async function exportProjectMedia(info, context) {
-    const AdmZip = require("adm-zip");
     let start = info.Start;
     //give myself 6ish minutes to write the file 
     console.log('remaining time', context.getRemainingTimeInMillis(),context.getRemainingTimeInMillis() - 400000);
@@ -143,25 +136,12 @@ exports.handler = async function(event, context) {
     return start;
   }
 
-  function sendMsg(params, successCallback, errorCallback) {
-    sqs.sendMessage(params, function(err, data) {
-      if (err) {
-        console.log(err);
-        errorCallback(err);
-      } else {
-        console.log(data.MessageId);
-        successCallback(data.MessageId);
-      }
-    });
+  async function sendMsg(params, successCallback, errorCallback) {
+    const command = new SendMessageCommand(params);
+    const data = await sqsClient.send(command);
+    console.log(data.MessageId);
+    return data.MessageId;
   }
-
-  async function sendMsgWrap(params)
-  {
-    return new Promise((resolve, reject) => {
-      sendMsg(params, (successResponse) => {resolve(successResponse)}, (errorResponse) => reject(errorResponse))
-    })
-  }
-  
 
   try {
     const { body ,attributes} =  event.Records[0];
@@ -177,7 +157,7 @@ exports.handler = async function(event, context) {
         QueueUrl: queue
       };
       console.log(params);
-      const result = await sendMsgWrap(params);
+      const result = await sendMsg(params);
     }
   }
   catch (err) {
